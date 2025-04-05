@@ -1,19 +1,29 @@
 {
-  "name": "server",
+  "name": "hookchat-server",
   "version": "1.0.0",
+  "description": "HookChat Server - Anonymous Chat Application",
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.7",
+    "@vitalets/google-translate-api": "^9.2.1",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^5.1.0",
-    "socket.io": "^4.8.1"
+    "dotenv": "^16.4.5",
+    "emoji-picker-react": "^4.12.2",
+    "express": "^4.18.3",
+    "framer-motion": "^12.6.3",
+    "react-icons": "^5.5.0",
+    "socket.io": "^4.7.4",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
   }
 }

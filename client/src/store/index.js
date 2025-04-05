@@ -1,42 +1,51 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 
-const useStore = create(
-  persist(
-    (set) => ({
-      // User state
-      user: null,
-      setUser: (user) => set({ user }),
-      
-      // Theme state
-      theme: 'dark',
-      setTheme: (theme) => set({ theme }),
-      
-      // Chat state
-      currentChat: null,
-      setCurrentChat: (chat) => set({ currentChat: chat }),
-      
-      // Settings
-      settings: {
-        gender: 'any',
-        country: 'any',
-        interests: [],
-        language: 'en',
-      },
-      setSettings: (settings) => set({ settings }),
-      
-      // Premium features
-      isPremium: false,
-      setPremium: (isPremium) => set({ isPremium }),
-      
-      // Ghost mode
-      ghostMode: false,
-      setGhostMode: (ghostMode) => set({ ghostMode }),
-    }),
-    {
-      name: 'hookchat-storage',
-    }
-  )
-);
-
-export default useStore; 
+export const useStore = create((set) => ({
+  // User state
+  user: null,
+  setUser: (user) => set({ user }),
+  
+  // Theme state
+  theme: 'light',
+  toggleTheme: () => set((state) => ({ 
+    theme: state.theme === 'light' ? 'dark' : 'light' 
+  })),
+  
+  // Chat state
+  currentChat: null,
+  messages: [],
+  isTyping: false,
+  setCurrentChat: (chat) => set({ currentChat: chat }),
+  setMessages: (messages) => set({ messages }),
+  addMessage: (message) => set((state) => ({ 
+    messages: [...state.messages, message] 
+  })),
+  setIsTyping: (isTyping) => set({ isTyping }),
+  
+  // User preferences
+  gender: '',
+  country: '',
+  interests: [],
+  setGender: (gender) => set({ gender }),
+  setCountry: (country) => set({ country }),
+  setInterests: (interests) => set({ interests }),
+  
+  // Premium features
+  isPremium: false,
+  ghostMode: false,
+  setIsPremium: (isPremium) => set({ isPremium }),
+  setGhostMode: (ghostMode) => set({ ghostMode }),
+  
+  // Reset store
+  reset: () => set({
+    user: null,
+    currentChat: null,
+    messages: [],
+    isTyping: false,
+    gender: '',
+    country: '',
+    interests: [],
+    isPremium: false,
+    ghostMode: false
+  })
+})); 

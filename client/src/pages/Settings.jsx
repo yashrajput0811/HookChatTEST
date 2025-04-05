@@ -1,207 +1,247 @@
 import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
-import { Globe, Users, Tag, Ghost, Crown, Shield } from 'lucide-react';
+import { motion } from 'framer-motion';
+import ThemeToggle from '../components/ThemeToggle';
 
-const Settings = () => {
-  const { settings, setSettings, isPremium, ghostMode, setGhostMode } = useStore();
-  const [selectedAvatar, setSelectedAvatar] = useState('👤');
+const premiumFeatures = [
+  {
+    id: 'ghost',
+    title: 'Ghost Mode',
+    description: 'Browse anonymously without appearing in the online users list',
+    icon: '👻',
+  },
+  {
+    id: 'country',
+    title: 'Country Filter',
+    description: 'Match with users from specific countries only',
+    icon: '🌎',
+  },
+  {
+    id: 'interests',
+    title: 'Interest Matching',
+    description: 'Get matched with users who share your interests',
+    icon: '🎯',
+  },
+  {
+    id: 'themes',
+    title: 'Custom Themes',
+    description: 'Access exclusive chat themes and backgrounds',
+    icon: '🎨',
+  },
+];
 
-  const avatars = ['👤', '👨', '👩', '🧑', '👧', '👦', '👶', '👵', '👴'];
+export default function Settings() {
+  const navigate = useNavigate();
+  const user = useStore((state) => state.user);
+  const isPremium = useStore((state) => state.isPremium);
+  const setIsPremium = useStore((state) => state.setIsPremium);
+  const [showPremiumSuccess, setShowPremiumSuccess] = useState(false);
 
-  const handleInterestToggle = (interest) => {
-    const newInterests = settings.interests.includes(interest)
-      ? settings.interests.filter((i) => i !== interest)
-      : [...settings.interests, interest];
-    setSettings({ ...settings, interests: newInterests });
+  const handleUpgrade = async () => {
+    // Simulate premium upgrade
+    setIsPremium(true);
+    setShowPremiumSuccess(true);
+    setTimeout(() => setShowPremiumSuccess(false), 3000);
   };
 
-  const commonInterests = [
-    'Music', 'Movies', 'Sports', 'Gaming', 'Technology',
-    'Travel', 'Food', 'Art', 'Books', 'Fitness',
-    'Fashion', 'Photography', 'Science', 'Politics', 'Business'
-  ];
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.1,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 },
+  };
+
+  if (!user) {
+    navigate('/');
+    return null;
+  }
 
   return (
-    <div className="pt-16 min-h-screen">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="min-h-screen animated-bg">
+      <nav className="glass-morphism py-4 px-6">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-transparent bg-clip-text">
+            Settings
+          </h1>
+          <ThemeToggle />
+        </div>
+      </nav>
+
+      <main className="container mx-auto max-w-6xl p-6">
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-8"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="grid grid-cols-1 md:grid-cols-2 gap-6"
         >
-          {/* Profile Settings */}
-          <div className="bg-white dark:bg-dark-800 rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-bold mb-6">Profile Settings</h2>
-            
-            {/* Avatar Selection */}
-            <div className="mb-6">
-              <h3 className="text-lg font-medium mb-3">Choose Your Avatar</h3>
-              <div className="flex flex-wrap gap-3">
-                {avatars.map((avatar) => (
-                  <button
-                    key={avatar}
-                    onClick={() => setSelectedAvatar(avatar)}
-                    className={`w-12 h-12 rounded-full flex items-center justify-center text-2xl transition-transform hover:scale-110 ${
-                      selectedAvatar === avatar
-                        ? 'ring-2 ring-primary-500'
-                        : 'hover:ring-2 hover:ring-gray-300 dark:hover:ring-dark-600'
-                    }`}
-                  >
-                    {avatar}
-                  </button>
-                ))}
+          {/* User Preferences */}
+          <motion.section
+            variants={itemVariants}
+            className="glass-morphism rounded-2xl p-6"
+          >
+            <h2 className="text-xl font-semibold mb-6">User Preferences</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="Anonymous"
+                  value={user.username || ''}
+                  onChange={() => {}}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Country</label>
+                <input
+                  type="text"
+                  className="input"
+                  value={user.country || ''}
+                  disabled
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Interests
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {user.interests?.map((interest) => (
+                    <span key={interest} className="badge badge-primary">
+                      {interest}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
-
-            {/* Gender Selection */}
-            <div className="mb-6">
-              <h3 className="text-lg font-medium mb-3">Gender Preference</h3>
-              <div className="flex space-x-4">
-                {['any', 'male', 'female'].map((gender) => (
-                  <button
-                    key={gender}
-                    onClick={() => setSettings({ ...settings, gender })}
-                    className={`px-4 py-2 rounded-lg transition-colors ${
-                      settings.gender === gender
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-gray-100 dark:bg-dark-700 hover:bg-gray-200 dark:hover:bg-dark-600'
-                    }`}
-                  >
-                    {gender.charAt(0).toUpperCase() + gender.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Country Selection */}
-            <div className="mb-6">
-              <h3 className="text-lg font-medium mb-3">Country</h3>
-              <select
-                value={settings.country}
-                onChange={(e) => setSettings({ ...settings, country: e.target.value })}
-                className="w-full p-2 rounded-lg border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800"
-              >
-                <option value="any">Any Country</option>
-                <option value="us">United States</option>
-                <option value="uk">United Kingdom</option>
-                <option value="ca">Canada</option>
-                <option value="au">Australia</option>
-                {/* Add more countries */}
-              </select>
-            </div>
-
-            {/* Interests */}
-            <div>
-              <h3 className="text-lg font-medium mb-3">Interests</h3>
-              <div className="flex flex-wrap gap-2">
-                {commonInterests.map((interest) => (
-                  <button
-                    key={interest}
-                    onClick={() => handleInterestToggle(interest)}
-                    className={`px-3 py-1 rounded-full text-sm transition-colors ${
-                      settings.interests.includes(interest)
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-gray-100 dark:bg-dark-700 hover:bg-gray-200 dark:hover:bg-dark-600'
-                    }`}
-                  >
-                    {interest}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
+          </motion.section>
 
           {/* Premium Features */}
-          <div className="bg-white dark:bg-dark-800 rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-bold mb-6">Premium Features</h2>
-            
+          <motion.section
+            variants={itemVariants}
+            className="glass-morphism rounded-2xl p-6"
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-semibold">Premium Features</h2>
+              {!isPremium && (
+                <button
+                  onClick={handleUpgrade}
+                  className="btn btn-primary"
+                >
+                  Upgrade Now
+                </button>
+              )}
+            </div>
             <div className="space-y-4">
-              {/* Ghost Mode */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-dark-700 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Ghost className="w-6 h-6 text-primary-500" />
-                  <div>
-                    <h3 className="font-medium">Ghost Mode</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Browse invisibly and control who can see you
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setGhostMode(!ghostMode)}
-                  disabled={!isPremium}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    isPremium
-                      ? ghostMode
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-gray-200 dark:bg-dark-600 hover:bg-gray-300 dark:hover:bg-dark-500'
-                      : 'bg-gray-100 dark:bg-dark-800 text-gray-400 cursor-not-allowed'
-                  }`}
+              {premiumFeatures.map((feature) => (
+                <div
+                  key={feature.id}
+                  className="flex items-start space-x-4 p-4 rounded-lg bg-white/5"
                 >
-                  {isPremium ? (ghostMode ? 'Enabled' : 'Enable') : 'Premium Only'}
-                </button>
-              </div>
+                  <div className="text-2xl">{feature.icon}</div>
+                  <div>
+                    <h3 className="font-medium">{feature.title}</h3>
+                    <p className="text-sm opacity-70">{feature.description}</p>
+                  </div>
+                  {isPremium ? (
+                    <span className="ml-auto badge badge-primary">Active</span>
+                  ) : (
+                    <span className="ml-auto badge badge-secondary">
+                      Premium
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.section>
 
-              {/* Priority Matching */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-dark-700 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Crown className="w-6 h-6 text-primary-500" />
-                  <div>
-                    <h3 className="font-medium">Priority Matching</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Get matched faster with priority in the queue
-                    </p>
-                  </div>
+          {/* Account Settings */}
+          <motion.section
+            variants={itemVariants}
+            className="glass-morphism rounded-2xl p-6"
+          >
+            <h2 className="text-xl font-semibold mb-6">Account Settings</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Notification Settings
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center space-x-2">
+                    <input type="checkbox" className="rounded" />
+                    <span>New message notifications</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input type="checkbox" className="rounded" />
+                    <span>Partner found notifications</span>
+                  </label>
                 </div>
-                <button
-                  disabled={!isPremium}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    isPremium
-                      ? 'bg-primary-500 text-white hover:bg-primary-600'
-                      : 'bg-gray-100 dark:bg-dark-800 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {isPremium ? 'Enabled' : 'Premium Only'}
-                </button>
               </div>
-
-              {/* Custom Avatars */}
-              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-dark-700 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <Shield className="w-6 h-6 text-primary-500" />
-                  <div>
-                    <h3 className="font-medium">Custom Avatars</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Upload your own avatar or use AI-generated ones
-                    </p>
-                  </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Privacy Settings
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center space-x-2">
+                    <input type="checkbox" className="rounded" />
+                    <span>Show online status</span>
+                  </label>
+                  <label className="flex items-center space-x-2">
+                    <input type="checkbox" className="rounded" />
+                    <span>Allow friend requests</span>
+                  </label>
                 </div>
-                <button
-                  disabled={!isPremium}
-                  className={`px-4 py-2 rounded-lg transition-colors ${
-                    isPremium
-                      ? 'bg-primary-500 text-white hover:bg-primary-600'
-                      : 'bg-gray-100 dark:bg-dark-800 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  {isPremium ? 'Enabled' : 'Premium Only'}
-                </button>
               </div>
             </div>
+          </motion.section>
 
-            {!isPremium && (
-              <div className="mt-6 text-center">
-                <button className="px-6 py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-lg font-medium hover:opacity-90 transition-opacity">
-                  Upgrade to Premium
-                </button>
-              </div>
-            )}
-          </div>
+          {/* Support & Help */}
+          <motion.section
+            variants={itemVariants}
+            className="glass-morphism rounded-2xl p-6"
+          >
+            <h2 className="text-xl font-semibold mb-6">Support & Help</h2>
+            <div className="space-y-4">
+              <button className="btn btn-secondary w-full text-left flex items-center space-x-2">
+                <span>📖</span>
+                <span>User Guide</span>
+              </button>
+              <button className="btn btn-secondary w-full text-left flex items-center space-x-2">
+                <span>❓</span>
+                <span>FAQ</span>
+              </button>
+              <button className="btn btn-secondary w-full text-left flex items-center space-x-2">
+                <span>📞</span>
+                <span>Contact Support</span>
+              </button>
+            </div>
+          </motion.section>
         </motion.div>
-      </div>
+      </main>
+
+      {/* Success Toast */}
+      <AnimatePresence>
+        {showPremiumSuccess && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="toast toast-success"
+          >
+            🎉 Welcome to HookChat Premium!
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
-};
-
-export default Settings; 
+} 

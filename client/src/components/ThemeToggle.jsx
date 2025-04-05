@@ -1,31 +1,31 @@
-import { useEffect, useState } from "react"
-import { Sun, Moon } from "lucide-react"
+import { useState, useEffect } from 'react';
 
 const ThemeToggle = () => {
-  const [darkMode, setDarkMode] = useState(() =>
-    localStorage.getItem("theme") === "dark"
-  )
+  const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
-    const html = document.documentElement
-    if (darkMode) {
-      html.classList.add("dark")
-      localStorage.setItem("theme", "dark")
-    } else {
-      html.classList.remove("dark")
-      localStorage.setItem("theme", "light")
-    }
-  }, [darkMode])
+    const isDarkMode = localStorage.getItem('theme') === 'dark' || 
+      (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    setIsDark(isDarkMode);
+    document.documentElement.classList.toggle('dark', isDarkMode);
+  }, []);
+
+  const toggleTheme = () => {
+    const newTheme = !isDark;
+    setIsDark(newTheme);
+    localStorage.setItem('theme', newTheme ? 'dark' : 'light');
+    document.documentElement.classList.toggle('dark', newTheme);
+  };
 
   return (
     <button
-      onClick={() => setDarkMode(!darkMode)}
-      className="flex items-center gap-2 bg-gray-200 dark:bg-gray-800 px-4 py-2 rounded-xl shadow hover:opacity-80 transition"
+      onClick={toggleTheme}
+      className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+      aria-label="Toggle theme"
     >
-      {darkMode ? <Moon size={18} /> : <Sun size={18} />}
-      <span className="text-sm">{darkMode ? "Dark" : "Light"}</span>
+      {isDark ? '🌙' : '☀️'}
     </button>
-  )
-}
+  );
+};
 
-export default ThemeToggle
+export default ThemeToggle;

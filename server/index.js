@@ -2,178 +2,134 @@ import express from "express"
 import { createServer } from "http"
 import { Server } from "socket.io"
 import cors from "cors"
+import { v4 as uuidv4 } from 'uuid'
 import dotenv from "dotenv"
-import { createClient } from "@supabase/supabase-js"
+import { translate } from '@vitalets/google-translate-api'
 
 dotenv.config()
 
 const app = express()
-const httpServer = createServer(app)
-const io = new Server(httpServer, {
+app.use(cors({
+  origin: process.env.CLIENT_URL || "http://localhost:5173",
+  methods: ["GET", "POST"],
+  credentials: true
+}))
+app.use(express.json())
+
+// Translation endpoint
+app.post('/translate', async (req, res) => {
+  try {
+    const { text, targetLang } = req.body
+    const result = await translate(text, { to: targetLang })
+    res.json({ translatedText: result.text })
+  } catch (error) {
+    console.error('Translation error:', error)
+    res.status(500).json({ error: 'Translation failed' })
+  }
+})
+
+const server = createServer(app)
+const io = new Server(server, {
   cors: {
     origin: process.env.CLIENT_URL || "http://localhost:5173",
-    methods: ["GET", "POST"]
-  }
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  transports: ['websocket', 'polling']
 })
 
-// Initialize Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-)
+// Store active users and their rooms
+const users = new Map()
+const rooms = new Map()
 
-// Store active users and their preferences
-const activeUsers = new Map()
-const waitingQueue = []
-let reportLog = []
-let bannedUsers = []
+// Function to find a matching partner
+function findMatch(socket, userData) {
+  for (const [userId, user] of users) {
+    // Don't match with self or already matched users
+    if (userId !== socket.id && !user.matched) {
+      // Check if they have at least one common interest
+      const hasCommonInterests = userData.interests.some(interest => 
+        user.interests.includes(interest)
+      )
+      
+      if (hasCommonInterests) {
+        return userId
+      }
+    }
+  }
+  return null
+}
 
 io.on("connection", (socket) => {
-  console.log("🟢 New user connected:", socket.id)
+  console.log("User connected:", socket.id)
 
-  // Handle user joining
-  socket.on("join", async (userData) => {
-    const { gender, country, interests, avatar } = userData
+  socket.on("user_info", (userData) => {
+    console.log("Received user info:", userData)
+    users.set(socket.id, { ...userData, matched: false })
     
-    // Store user data
-    activeUsers.set(socket.id, {
-      socket,
-      gender,
-      country,
-      interests,
-      avatar,
-      isGhost: false,
-    })
-
     // Try to find a match
-    findMatch(socket.id)
+    const matchId = findMatch(socket, userData)
+    if (matchId) {
+      const roomId = uuidv4()
+      const matchedUser = users.get(matchId)
+      
+      // Update matched status
+      users.set(socket.id, { ...userData, matched: true })
+      users.set(matchId, { ...matchedUser, matched: true })
+      
+      // Create and store room info
+      rooms.set(roomId, [socket.id, matchId])
+      
+      // Join both users to the room
+      socket.join(roomId)
+      io.sockets.sockets.get(matchId)?.join(roomId)
+      
+      // Notify both users
+      io.to(roomId).emit("chat_started", { 
+        roomId,
+        interests: [...new Set([...userData.interests, ...matchedUser.interests])]
+      })
+      console.log("Match found! Room created:", roomId)
+    } else {
+      console.log("No match found for user:", socket.id)
+    }
   })
 
-  socket.on("send_message", ({ to, text, avatar }) => {
-    io.to(to).emit("receive_message", { from: socket.id, text, avatar })
+  socket.on("send_message", ({ roomId, message, type = 'text', imageUrl }) => {
+    console.log("Message received:", { roomId, message, type })
+    io.to(roomId).emit("receive_message", {
+      sender: socket.id,
+      message,
+      type,
+      imageUrl,
+      timestamp: new Date().toISOString()
+    })
   })
 
-  socket.on("typing", ({ to }) => {
-    io.to(to).emit("stranger_typing")
+  socket.on("typing", ({ roomId, isTyping }) => {
+    socket.to(roomId).emit("partner_typing", { isTyping })
   })
 
-  socket.on("stop_typing", ({ to }) => {
-    io.to(to).emit("stranger_stop_typing")
-  })
-
-  socket.on("report_user", ({ reportedId }) => {
-    reportLog.push({ from: socket.id, reportedId, time: new Date() })
-    console.log(`🚩 User ${socket.id} reported ${reportedId}`)
-    // bannedUsers.push(reportedId) // optional
-  })
-
-  // Handle user leaving
   socket.on("disconnect", () => {
-    console.log("🔴 User disconnected:", socket.id)
-    activeUsers.delete(socket.id)
-    // Remove from waiting queue if present
-    const queueIndex = waitingQueue.indexOf(socket.id)
-    if (queueIndex !== -1) {
-      waitingQueue.splice(queueIndex, 1)
+    // Find and clean up user's room
+    for (const [roomId, participants] of rooms) {
+      if (participants.includes(socket.id)) {
+        // Notify other participant
+        const otherUser = participants.find(id => id !== socket.id)
+        if (otherUser) {
+          io.to(otherUser).emit("partner_disconnected")
+          users.set(otherUser, { ...users.get(otherUser), matched: false })
+        }
+        rooms.delete(roomId)
+        break
+      }
     }
-  })
-
-  // Handle messages
-  socket.on("message", (data) => {
-    const { to, message } = data
-    const recipientSocket = activeUsers.get(to)?.socket
-    if (recipientSocket) {
-      recipientSocket.emit("message", {
-        from: socket.id,
-        message,
-        timestamp: new Date().toISOString(),
-      })
-    }
-  })
-
-  // Handle typing indicator
-  socket.on("typing", (data) => {
-    const { to, isTyping } = data
-    const recipientSocket = activeUsers.get(to)?.socket
-    if (recipientSocket) {
-      recipientSocket.emit("typing", {
-        from: socket.id,
-        isTyping,
-      })
-    }
-  })
-
-  // Handle next chat request
-  socket.on("next", () => {
-    findMatch(socket.id)
-  })
-
-  // Handle ghost mode toggle
-  socket.on("toggleGhost", (isGhost) => {
-    const user = activeUsers.get(socket.id)
-    if (user) {
-      user.isGhost = isGhost
-    }
+    users.delete(socket.id)
+    console.log("User disconnected:", socket.id)
   })
 })
 
-// Match finding logic
-function findMatch(userId) {
-  const user = activeUsers.get(userId)
-  if (!user) return
-
-  // Remove from waiting queue if already there
-  const queueIndex = waitingQueue.indexOf(userId)
-  if (queueIndex !== -1) {
-    waitingQueue.splice(queueIndex, 1)
-  }
-
-  // Find a compatible match
-  for (const [id, potentialMatch] of activeUsers.entries()) {
-    if (
-      id !== userId &&
-      !potentialMatch.isGhost &&
-      !user.isGhost &&
-      (user.gender === "any" || potentialMatch.gender === user.gender) &&
-      (user.country === "any" || potentialMatch.country === user.country) &&
-      hasCommonInterests(user.interests, potentialMatch.interests)
-    ) {
-      // Create chat room
-      const roomId = `${userId}-${id}`
-      user.socket.join(roomId)
-      potentialMatch.socket.join(roomId)
-
-      // Notify both users
-      user.socket.emit("matchFound", {
-        roomId,
-        partner: {
-          id,
-          avatar: potentialMatch.avatar,
-        },
-      })
-
-      potentialMatch.socket.emit("matchFound", {
-        roomId,
-        partner: {
-          id: userId,
-          avatar: user.avatar,
-        },
-      })
-
-      return
-    }
-  }
-
-  // If no match found, add to waiting queue
-  waitingQueue.push(userId)
-}
-
-// Helper function to check for common interests
-function hasCommonInterests(interests1, interests2) {
-  if (!interests1.length || !interests2.length) return true
-  return interests1.some((interest) => interests2.includes(interest))
-}
-
-httpServer.listen(3001, () => {
-  console.log("🚀 Server running on http://localhost:3001")
+const PORT = process.env.PORT || 3001
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`)
 })

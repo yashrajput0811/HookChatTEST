@@ -1,34 +1,14 @@
 import { useEffect } from 'react';
 import { useStore } from '../store';
 
-const ThemeProvider = ({ children }) => {
-  const { theme, setTheme } = useStore();
+export function ThemeProvider({ children }) {
+  const theme = useStore((state) => state.theme);
 
   useEffect(() => {
-    // Check for saved theme preference
-    const savedTheme = localStorage.getItem('theme') || 'dark';
-    setTheme(savedTheme);
-
-    // Apply theme to document
-    if (savedTheme === 'dark') {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [setTheme]);
-
-  useEffect(() => {
-    // Update theme when it changes
-    if (theme === 'dark') {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
-    }
+    const root = window.document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
   }, [theme]);
 
-  return <>{children}</>;
-};
-
-export default ThemeProvider; 
+  return children;
+} 

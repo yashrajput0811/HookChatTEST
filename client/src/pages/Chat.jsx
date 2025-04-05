@@ -1,196 +1,280 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store';
-import { Send, Loader2, Flag, X } from 'lucide-react';
+import { socket } from '../socket';
+import { motion, AnimatePresence } from 'framer-motion';
+import { IoSend, IoImage, IoHappy, IoLanguage } from 'react-icons/io5';
+import EmojiPicker from 'emoji-picker-react';
+import axios from 'axios';
 
 const Chat = () => {
-  const { currentChat, setCurrentChat } = useStore();
+  const navigate = useNavigate();
+  const { user } = useStore();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [showReportModal, setShowReportModal] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
+  const [roomId, setRoomId] = useState(null);
+  const [isPartnerTyping, setIsPartnerTyping] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [autoTranslate, setAutoTranslate] = useState(false);
   const messagesEndRef = useRef(null);
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const [imagePreview, setImagePreview] = useState(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
-    scrollToBottom();
+    const userInfo = JSON.parse(localStorage.getItem('userInfo'));
+    if (!userInfo) {
+      navigate('/');
+      return;
+    }
+
+    // Emit user info to server
+    socket.emit('user_info', userInfo);
+    console.log('Emitting user info:', userInfo);
+
+    socket.on('chat_started', ({ roomId }) => {
+      console.log('Chat started:', roomId);
+      setRoomId(roomId);
+      setIsConnected(true);
+    });
+
+    socket.on('receive_message', async ({ sender, message, timestamp, type, imageUrl }) => {
+      const newMsg = {
+        sender: sender === socket.id ? 'me' : 'partner',
+        content: message,
+        timestamp,
+        type: type || 'text',
+        imageUrl
+      };
+
+      if (autoTranslate && sender !== socket.id && type !== 'image') {
+        try {
+          const response = await axios.post('http://localhost:3001/translate', {
+            text: message,
+            targetLang: navigator.language.split('-')[0]
+          });
+          newMsg.translation = response.data.translatedText;
+        } catch (error) {
+          console.error('Translation error:', error);
+        }
+      }
+
+      setMessages(prev => [...prev, newMsg]);
+    });
+
+    socket.on('partner_typing', ({ isTyping }) => {
+      setIsPartnerTyping(isTyping);
+    });
+
+    socket.on('partner_disconnected', () => {
+      setMessages(prev => [...prev, { 
+        type: 'system', 
+        content: 'Your chat partner has disconnected.' 
+      }]);
+      setIsConnected(false);
+    });
+
+    return () => {
+      socket.off('chat_started');
+      socket.off('receive_message');
+      socket.off('partner_typing');
+      socket.off('partner_disconnected');
+    };
+  }, [user, navigate, autoTranslate]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSendMessage = () => {
+  const handleSend = async () => {
+    if (!newMessage.trim() && !imagePreview) return;
+    
+    if (imagePreview) {
+      // In a real app, you would upload the image to a server here
+      socket.emit('send_message', {
+        roomId,
+        message: 'Image',
+        type: 'image',
+        imageUrl: imagePreview
+      });
+      setImagePreview(null);
+    }
+
     if (newMessage.trim()) {
-      setMessages([...messages, { text: newMessage, sender: 'me' }]);
-      setNewMessage('');
-      // Simulate typing and response
-      setIsTyping(true);
-      setTimeout(() => {
-        setMessages(prev => [...prev, { text: 'This is a simulated response', sender: 'other' }]);
-        setIsTyping(false);
-      }, 2000);
+      socket.emit('send_message', {
+        roomId,
+        message: newMessage.trim()
+      });
+    }
+    
+    setNewMessage('');
+    setShowEmojiPicker(false);
+  };
+
+  const handleTyping = (e) => {
+    setNewMessage(e.target.value);
+    socket.emit('typing', { roomId, isTyping: e.target.value.length > 0 });
+  };
+
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendMessage();
-    }
+  const handleEmojiClick = (emojiData) => {
+    setNewMessage(prev => prev + emojiData.emoji);
   };
 
-  const handleNextChat = () => {
-    setCurrentChat(null);
-  };
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-600 via-blue-500 to-teal-400 flex items-center justify-center">
+        <motion.div 
+          initial={{ scale: 0.8, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="bg-white/10 backdrop-blur-lg rounded-xl p-8 text-white text-center"
+        >
+          <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mx-auto mb-4" />
+          <h2 className="text-2xl font-semibold mb-2">Looking for a chat partner...</h2>
+          <p className="text-white/80">We're finding someone with similar interests</p>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
-    <div className="pt-16 min-h-screen">
-      <div className="max-w-4xl mx-auto px-4">
-        <div className="bg-white dark:bg-dark-800 rounded-lg shadow-sm overflow-hidden">
-          {/* Chat Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-dark-700 flex justify-between items-center">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-primary-500 flex items-center justify-center text-white">
-                {currentChat?.avatar || '👤'}
-              </div>
-              <div>
-                <h3 className="font-medium">Anonymous User</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {isTyping ? 'Typing...' : 'Online'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setShowReportModal(true)}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-full transition-colors"
-              >
-                <Flag className="w-5 h-5" />
-              </button>
-              <button
-                onClick={handleNextChat}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-dark-700 rounded-full transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Messages */}
-          <div className="h-[calc(100vh-16rem)] overflow-y-auto p-4">
-            <AnimatePresence>
-              {messages.map((message, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  className={`flex ${message.sender === 'me' ? 'justify-end' : 'justify-start'} mb-4`}
-                >
-                  <div
-                    className={`max-w-[70%] rounded-lg p-3 ${
-                      message.sender === 'me'
-                        ? 'bg-primary-500 text-white'
-                        : 'bg-gray-100 dark:bg-dark-700 text-gray-800 dark:text-white'
-                    }`}
-                  >
-                    {message.text}
-                  </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            {isTyping && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex items-center space-x-1"
-              >
-                <Loader2 className="w-4 h-4 animate-spin text-primary-500" />
-                <span className="text-sm text-gray-500 dark:text-gray-400">Typing...</span>
-              </motion.div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Message Input */}
-          <div className="p-4 border-t border-gray-200 dark:border-dark-700">
-            <div className="flex items-center space-x-2">
-              <textarea
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Type your message..."
-                className="flex-1 p-2 rounded-lg border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-                rows={1}
-              />
-              <button
-                onClick={handleSendMessage}
-                disabled={!newMessage.trim()}
-                className="p-2 rounded-full bg-primary-500 text-white hover:bg-primary-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gradient-to-br from-purple-600 via-blue-500 to-teal-400 flex flex-col">
+      {/* Chat Header */}
+      <div className="bg-white/10 backdrop-blur-lg p-4 flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="w-3 h-3 bg-green-400 rounded-full animate-pulse" />
+          <h2 className="text-white font-semibold">Chat Partner Online</h2>
         </div>
+        <button
+          onClick={() => setAutoTranslate(!autoTranslate)}
+          className={`flex items-center space-x-2 px-3 py-1.5 rounded-lg transition-colors ${
+            autoTranslate ? 'bg-white/20 text-white' : 'bg-white/10 text-white/70'
+          }`}
+        >
+          <IoLanguage className="text-xl" />
+          <span className="text-sm">Auto-Translate</span>
+        </button>
       </div>
 
-      {/* Report Modal */}
-      <AnimatePresence>
-        {showReportModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-          >
+      {/* Messages Container */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <AnimatePresence>
+          {messages.map((msg, idx) => (
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white dark:bg-dark-800 p-6 rounded-lg max-w-md w-full mx-4"
+              key={idx}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}
             >
-              <h3 className="text-lg font-medium mb-4">Report User</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Reason</label>
-                  <select className="w-full p-2 rounded-lg border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800">
-                    <option>Inappropriate Behavior</option>
-                    <option>Harassment</option>
-                    <option>Spam</option>
-                    <option>Other</option>
-                  </select>
+              {msg.type === 'system' ? (
+                <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 py-2 text-white/70 text-center text-sm w-full">
+                  {msg.content}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Description</label>
-                  <textarea
-                    className="w-full p-2 rounded-lg border border-gray-200 dark:border-dark-700 bg-white dark:bg-dark-800"
-                    rows={3}
-                    placeholder="Please describe the issue..."
-                  />
+              ) : (
+                <div className={`max-w-[70%] ${msg.sender === 'me' ? 'bg-white/20' : 'bg-white/10'} backdrop-blur-sm rounded-lg px-4 py-2`}>
+                  {msg.type === 'image' ? (
+                    <img src={msg.imageUrl} alt="Shared" className="rounded-lg max-w-full" />
+                  ) : (
+                    <>
+                      <p className="text-white">{msg.content}</p>
+                      {msg.translation && (
+                        <p className="text-white/70 text-sm mt-1 border-t border-white/10 pt-1">
+                          {msg.translation}
+                        </p>
+                      )}
+                    </>
+                  )}
+                  <p className="text-white/50 text-xs mt-1">
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  </p>
                 </div>
-                <div className="flex justify-end space-x-2">
-                  <button
-                    onClick={() => setShowReportModal(false)}
-                    className="px-4 py-2 rounded-lg bg-gray-200 dark:bg-dark-700 hover:bg-gray-300 dark:hover:bg-dark-600 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={() => {
-                      // Handle report submission
-                      setShowReportModal(false);
-                    }}
-                    className="px-4 py-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
-                  >
-                    Report
-                  </button>
-                </div>
-              </div>
+              )}
             </motion.div>
+          ))}
+        </AnimatePresence>
+        {isPartnerTyping && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center space-x-2 text-white/70"
+          >
+            <div className="flex space-x-1">
+              <div className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <div className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <div className="w-2 h-2 bg-white/50 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+            <span className="text-sm">Partner is typing...</span>
           </motion.div>
         )}
-      </AnimatePresence>
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Input Area */}
+      <div className="bg-white/10 backdrop-blur-lg p-4">
+        {imagePreview && (
+          <div className="mb-4 relative">
+            <img src={imagePreview} alt="Preview" className="max-h-32 rounded-lg" />
+            <button
+              onClick={() => setImagePreview(null)}
+              className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1"
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => fileInputRef.current.click()}
+            className="p-2 text-white/70 hover:text-white transition-colors"
+          >
+            <IoImage className="text-xl" />
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImageUpload}
+            accept="image/*"
+            className="hidden"
+          />
+          <button
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className="p-2 text-white/70 hover:text-white transition-colors"
+          >
+            <IoHappy className="text-xl" />
+          </button>
+          <input
+            type="text"
+            value={newMessage}
+            onChange={handleTyping}
+            onKeyPress={e => e.key === 'Enter' && handleSend()}
+            placeholder="Type a message..."
+            className="flex-1 bg-white/10 text-white placeholder-white/50 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-white/20"
+          />
+          <button
+            onClick={handleSend}
+            disabled={!newMessage.trim() && !imagePreview}
+            className="p-2 text-white disabled:text-white/50 transition-colors"
+          >
+            <IoSend className="text-xl" />
+          </button>
+        </div>
+        {showEmojiPicker && (
+          <div className="absolute bottom-20 right-4">
+            <EmojiPicker onEmojiClick={handleEmojiClick} />
+          </div>
+        )}
+      </div>
     </div>
   );
 };
