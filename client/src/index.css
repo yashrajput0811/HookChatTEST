@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Enable smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom dark mode handling if needed later */
+body {
+  @apply transition-colors duration-300 ease-in-out bg-white text-black dark:bg-gray-900 dark:text-white;
+}
+
+/* Chat message bubble styling (optional) */
+.chat-bubble {
+  @apply px-4 py-2 rounded-xl text-sm;
+}
+
+.chat-bubble.me {
+  @apply bg-emerald text-white self-end;
+}
+
+.chat-bubble.them {
+  @apply bg-gray-700 text-white self-start;
+}
+
+/* Typing status styling */
+.typing-indicator {
+  @apply text-sm text-gray-400 italic mb-2;
+}
+
+/* Utility: hide scrollbar but allow scroll */
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hidden {
+  -ms-overflow-style: none; /* IE 10+ */
+  scrollbar-width: none; /* Firefox */
+}
